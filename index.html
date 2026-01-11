@@ -16,8 +16,8 @@
       box-shadow: 0 0 5px #ccc;
     }
   </style>
-  <!-- 高德地图 JS API -->
-  <script src="https://webapi.amap.com/maps?v=2.0&key=7e173197aaa3099300d4e083a9648335"></script>
+  <!-- 使用稳定 SDK 并显式加载插件 -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=7e173197aaa3099300d4e083a9648335&plugin=AMap.Scale,AMap.Geolocation"></script>
 </head>
 <body>
   <div id="panel">
@@ -40,8 +40,8 @@
       showLabel: false
     });
 
-    // 添加比例尺和定位控件（A4）
-    map.addControl(new AMap.ScaleControl()); // ✅ 修正：使用 ScaleControl
+    // ✅ 使用 AMap.Scale（兼容性更好）
+    map.addControl(new AMap.Scale());
     map.addControl(new AMap.Geolocation());
 
     // ========================
@@ -50,15 +50,20 @@
     let wmsLayer = null;
 
     function createWMSLayer() {
-      wmsLayer = new AMap.TileLayer.WMS({
-        url: 'https://wms.qgiscloud.com/yuxi/4d045a91/', // ✅ 正确 URL，无 GetCapabilities 参数
-        params: {
-          layers: 'parking',
-          transparent: true,
-          format: 'image/png'
-        },
-        zIndex: 10
-      });
+      try {
+        wmsLayer = new AMap.TileLayer.WMS({
+          url: 'https://wms.qgiscloud.com/yuxi/4d045a91/',
+          params: {
+            layers: 'parking',
+            transparent: true,
+            format: 'image/png'
+          },
+          zIndex: 10
+        });
+        console.log("WMS 图层创建成功");
+      } catch (err) {
+        console.error("WMS 图层创建失败:", err);
+      }
     }
 
     // ========================
@@ -78,11 +83,9 @@
         ]
       };
 
-      // 清除旧标记
       geojsonMarkers.forEach(m => map.remove(m));
       geojsonMarkers = [];
 
-      // 创建新标记
       geojsonData.features.forEach(f => {
         const coord = f.geometry.coordinates;
         const props = f.properties;
@@ -101,7 +104,7 @@
         });
 
         marker.on('click', () => popup.open(map, marker.getPosition()));
-        map.add(marker); // ✅ 必须添加到地图
+        map.add(marker);
         geojsonMarkers.push(marker);
       });
     }
@@ -128,7 +131,7 @@
 
       if (checked) {
         if (!wmsLayer) createWMSLayer();
-        map.add(wmsLayer);
+        if (wmsLayer) map.add(wmsLayer);
         loadGeoJSONMarkers();
       } else {
         if (wmsLayer) map.remove(wmsLayer);
