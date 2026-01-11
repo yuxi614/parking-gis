@@ -48,16 +48,17 @@
     // A1: 加载 QGIS Cloud WMS 图层（背景可视化）
     // ========================
     let wmsLayer;
-    function createWMSLayer() {
-      wmsLayer = new AMap.TileLayer.WMS({
-        url: 'https://wms.qgiscloud.com/yuxi/4d045a91/?service=WMS&request=GetCapabilities',
-        params: {
-          layers: 'parking',
-          transparent: true
-        },
-        zIndex: 10
-      });
-    }
+   function createWMSLayer() {
+  wmsLayer = new AMap.TileLayer.WMS({
+    url: 'https://wms.qgiscloud.com/yuxi/4d045a91/', // 
+    params: {
+      layers: 'parking_points', // 
+      transparent: true,
+      format: 'image/png'
+    },
+    zIndex: 10
+  });
+}
 
     // ========================
     // A2: 加载 GeoJSON 实现可点击 Marker + 弹窗
