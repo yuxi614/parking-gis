@@ -41,17 +41,17 @@
     });
 
     // 添加比例尺和定位控件（A4）
-    map.addControl(new AMap.ScaleControl());
+    map.addControl(new AMap.ScaleControl()); // ✅ 修正：使用 ScaleControl
     map.addControl(new AMap.Geolocation());
 
     // ========================
     // A1: 加载 QGIS Cloud WMS 图层（背景可视化）
     // ========================
-    let wmsLayer = null; // 初始化为 null
+    let wmsLayer = null;
 
     function createWMSLayer() {
       wmsLayer = new AMap.TileLayer.WMS({
-        url: 'https://wms.qgiscloud.com/yuxi/4d045a91/', // ✅ 修正：去掉 GetCapabilities 参数
+        url: 'https://wms.qgiscloud.com/yuxi/4d045a91/', // ✅ 正确 URL，无 GetCapabilities 参数
         params: {
           layers: 'parking',
           transparent: true,
@@ -65,6 +65,7 @@
     // A2: 加载 GeoJSON 实现可点击 Marker + 弹窗
     // ========================
     let geojsonMarkers = [];
+
     async function loadGeoJSONMarkers() {
       const geojsonData = {
         "type": "FeatureCollection",
@@ -77,9 +78,11 @@
         ]
       };
 
+      // 清除旧标记
       geojsonMarkers.forEach(m => map.remove(m));
       geojsonMarkers = [];
 
+      // 创建新标记
       geojsonData.features.forEach(f => {
         const coord = f.geometry.coordinates;
         const props = f.properties;
@@ -98,8 +101,8 @@
         });
 
         marker.on('click', () => popup.open(map, marker.getPosition()));
-        geojsonMarkers.push(marker);
         map.add(marker); // ✅ 必须添加到地图
+        geojsonMarkers.push(marker);
       });
     }
 
@@ -119,9 +122,10 @@
       return { '空闲': 'green', '紧张': 'orange', '满位': 'red' }[status] || 'black';
     }
 
-    // 切换图层显示
+    // 切换图层显示（安全处理）
     function toggleLayer() {
       const checked = document.getElementById('showParking').checked;
+
       if (checked) {
         if (!wmsLayer) createWMSLayer();
         map.add(wmsLayer);
@@ -136,6 +140,7 @@
     // B1 + C5: 搜索 POI 并找最近停车场
     // ========================
     let poiMarkers = [];
+
     function searchPOI() {
       const keyword = document.getElementById('keyword').value.trim();
       if (!keyword) return;
