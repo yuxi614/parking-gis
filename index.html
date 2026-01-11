@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>城市停车场供需分析系统</title>
+  <style>
+    #map { width: 100%; height: 100vh; margin: 0; }
+    #panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 1000;
+      box-shadow: 0 0 5px #ccc;
+    }
+  </style>
+  <!-- 高德地图 JS API -->
+  <script src="https://webapi.amap.com/maps?v=2.0&key=7e173197aaa3099300d4e083a9648335"></script>
+</head>
+<body>
+  <div id="panel">
+    <h3>城市停车场供需分析</h3>
+    <input type="text" id="keyword" placeholder="输入目的地（如：医院、商场）" />
+    <button onclick="searchPOI()">搜索</button><br><br>
+    <label>
+      <input type="checkbox" id="showParking" onchange="toggleLayer()">
+      显示停车场（分类渲染）
+    </label>
+  </div>
+  <div id="map"></div>
+
+  <script>
+    // 初始化地图（以上海为中心）
+    const map = new AMap.Map('map', {
+      zoom: 12,
+      center: [121.48, 31.23],
+      features: ['bg', 'road'],
+      showLabel: false
+    });
+
+    // 添加比例尺和定位控件（A4）
+    map.addControl(new AMap.Scale());
+    map.addControl(new AMap.Geolocation());
+
+    // ========================
+    // A1: 加载 QGIS Cloud WMS 图层（背景可视化）
+    // ========================
+    let wmsLayer;
+    function createWMSLayer() {
+      wmsLayer = new AMap.TileLayer.WMS({
+        url: 'https://wms.qgiscloud.com/vuxi/4d045a91/',
+        params: {
+          layers: 'parking',
+          transparent: true
+        },
+        zIndex: 10
+      });
+    }
+
+    // ========================
+    // A2: 加载 GeoJSON 实现可点击 Marker + 弹窗
+    // ========================
+    let geojsonMarkers = [];
+    async function loadGeoJSONMarkers() {
+      // 模拟 GeoJSON 数据（实际可放 GitHub）
+      const geojsonData = {
+        "type": "FeatureCollection",
+        "features": [
+          {"type":"Feature","properties":{"name":"中山广场停车场","total":200,"used":180,"status":"紧张"},"geometry":{"type":"Point","coordinates":[121.48,31.23]}},
+          {"type":"Feature","properties":{"name":"人民公园地下库","total":150,"used":50,"status":"空闲"},"geometry":{"type":"Point","coordinates":[121.49,31.22]}},
+          {"type":"Feature","properties":{"name":"南京路商业中心","total":300,"used":290,"status":"满位"},"geometry":{"type":"Point","coordinates":[121.475,31.235]}},
+          {"type":"Feature","properties":{"name":"外滩观光停车场","total":100,"used":20,"status":"空闲"},"geometry":{"type":"Point","coordinates":[121.49,31.24]}},
+          {"type":"Feature","properties":{"name":"徐家汇地铁车库","total":250,"used":200,"status":"紧张"},"geometry":{"type":"Point","coordinates":[121.43,31.2]}}
+        ]
+      };
+
+      // 清除旧标记
+      geojsonMarkers.forEach(m => map.remove(m));
+      geojsonMarkers = [];
+
+      // 创建 Marker 并绑定弹窗
+      geojsonData.features.forEach(f => {
+        const coord = f.geometry.coordinates;
+        const props = f.properties;
+        const marker = new AMap.Marker({
+          position: [coord[0], coord[1]],
+          title: props.name,
+          icon: getStatusIcon(props.status)
+        });
+
+        // 弹窗内容
+        const popup = new AMap.InfoWindow({
+          content: `<div style="padding:8px;">
+            <h4>${props.name}</h4>
+            <p>总车位: ${props.total} | 已用: ${props.used}</p>
+            <p>状态: <b style="color:${getStatusColor(props.status)}">${props.status}</b></p>
+          </div>`
+        });
+
+        marker.on('click', () => popup.open(map, marker.getPosition()));
+        geojsonMarkers.push(marker);
+      });
+    }
+
+    // 根据状态返回图标颜色（简化版）
+    function getStatusIcon(status) {
+      const colors = { '空闲': '#0f0', '紧张': '#fa0', '满位': '#f00' };
+      return new AMap.Icon({
+        size: new AMap.Size(20, 20),
+        image: 'data:image/svg+xml;base64,' + btoa(`
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" fill="${colors[status] || '#888'}"/>
+          </svg>
+        `)
+      });
+    }
+    function getStatusColor(status) {
+      return { '空闲': 'green', '紧张': 'orange', '满位': 'red' }[status] || 'black';
+    }
+
+    // 切换图层显示
+    function toggleLayer() {
+      const checked = document.getElementById('showParking').checked;
+      if (checked) {
+        if (!wmsLayer) createWMSLayer();
+        map.add(wmsLayer);
+        loadGeoJSONMarkers(); // 同时加载可交互点
+      } else {
+        map.remove(wmsLayer);
+        geojsonMarkers.forEach(m => map.remove(m));
+      }
+    }
+
+    // ========================
+    // B1 + C5: 搜索 POI 并找最近停车场
+    // ========================
+    let poiMarkers = [];
+    function searchPOI() {
+      const keyword = document.getElementById('keyword').value.trim();
+      if (!keyword) return;
+
+      // 清除旧POI
+      poiMarkers.forEach(m => map.remove(m));
+      poiMarkers = [];
+
+      const placeSearch = new AMap.PlaceSearch({ pageSize: 10 });
+      placeSearch.search(keyword, (status, result) => {
+        if (status === 'complete') {
+          result.poiList.pois.forEach(poi => {
+            const marker = new AMap.Marker({
+              position: poi.location,
+              title: poi.name,
+              icon: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png'
+            });
+
+            // C5: 点击POI → 找最近停车场
+            marker.on('click', () => findNearestParking(poi.location));
+
+            map.add(marker);
+            poiMarkers.push(marker);
+          });
+          map.setFitView();
+        }
+      });
+    }
+
+    // C5: 最近停车场（基于 GeoJSON 数据计算）
+    function findNearestParking(userPos) {
+      const mockParking = [
+        { name: "中山广场停车场", pos: [121.48, 31.23], status: "紧张" },
+        { name: "人民公园地下库", pos: [121.49, 31.22], status: "空闲" },
+        { name: "南京路商业中心", pos: [121.475, 31.235], status: "满位" },
+        { name: "外滩观光停车场", pos: [121.49, 31.24], status: "空闲" },
+        { name: "徐家汇地铁车库", pos: [121.43, 31.2], status: "紧张" }
+      ];
+
+      const nearest = mockParking
+        .map(p => ({
+          ...p,
+          dist: Math.sqrt(
+            Math.pow(p.pos[0] - userPos.lng, 2) + 
+            Math.pow(p.pos[1] - userPos.lat, 2)
+          )
+        }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 3);
+
+      alert(`最近的3个停车场：\n${nearest.map(p => `${p.name} (${(p.dist * 111).toFixed(1)} km)`).join('\n')}`);
+    }
+  </script>
+</body>
+</html>
